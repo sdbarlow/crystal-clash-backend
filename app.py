@@ -8,7 +8,6 @@ from dotenv import load_dotenv
 from sqlalchemy import text, or_
 from db import db
 import os
-from twilio.rest import Client
 from datetime import datetime 
 from sqlalchemy.exc import IntegrityError
 from flask_cors import CORS
