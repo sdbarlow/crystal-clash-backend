@@ -153,5 +153,4 @@ def search_users():
         return jsonify({'error': 'Failed to search users'}), 500
 
 if __name__ == '__main__':
-    print("Models available:", UserModel.__table__)  # Debug print
-    app.run(debug=True)
+    app.run()
