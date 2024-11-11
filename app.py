@@ -13,12 +13,6 @@ from datetime import datetime
 from sqlalchemy.exc import IntegrityError
 from flask_cors import CORS
 
-
-account_sid = "AC17fabbee4f9fe04b6cdd6159b97997bf"
-auth_token  = "ea9582c83f62fe28c3b170559cfb95a2"
-
-client = Client(account_sid, auth_token)
-
 # Import all models
 from models import UserModel  # This is crucial!
 
@@ -46,26 +40,21 @@ app = create_app()
 @app.route('/login', methods=['POST'])
 def login():
     try:
-        # Check if the request contains JSON data
         if not request.is_json:
             return jsonify({'error': 'Missing JSON in request'}), 400
 
-        # Get the JSON data
         apple_user_data = request.get_json()
         
         if not apple_user_data:
             return jsonify({'error': 'Invalid JSON format'}), 400
 
-        # Get email with better error handling
         email = apple_user_data.get('email')
         if not email:
             return jsonify({'error': 'Email is required'}), 400
 
-        # Check if user exists
         existing_user = UserModel.query.filter_by(email=email).first()
 
         if existing_user:
-            # Create access token
             access_token = create_access_token(
                 identity=existing_user.id,
                 additional_claims={
@@ -80,15 +69,13 @@ def login():
                 'token': access_token
             })
         
-        # Create new user with better error handling
         full_name = apple_user_data.get('fullName', {})
         given_name = full_name.get('givenName', '')
         family_name = full_name.get('familyName', '')
         
-        # Create username
         username = f"{given_name} {family_name}".strip()
         if not username:
-            username = email.split('@')[0]  # Fallback username from email
+            username = email.split('@')[0]  
 
         new_user = UserModel(
             email=email,
@@ -99,7 +86,6 @@ def login():
         db.session.add(new_user)
         db.session.commit()
 
-        # Create access token for new user
         access_token = create_access_token(
             identity=new_user.id,
             additional_claims={
@@ -125,15 +111,12 @@ def login():
 @app.route('/api/search-users', methods=['GET'])
 def search_users():
     try:
-        # Get search query and pagination parameters
         search_query = request.args.get('query', '')
         page = request.args.get('page', 1, type=int)
         per_page = request.args.get('per_page', 20, type=int)
 
-        # Build the query
         query = UserModel.query
 
-        # Add search filter if query exists
         if search_query:
             search_filter = or_(
                 UserModel.username.ilike(f'%{search_query}%'),
@@ -141,14 +124,12 @@ def search_users():
             )
             query = query.filter(search_filter)
 
-        # Execute paginated query
         paginated_users = query.paginate(
             page=page, 
             per_page=per_page,
             error_out=False
         )
 
-        # Format response
         users = [{
             'id': user.id,
             'username': user.username,
