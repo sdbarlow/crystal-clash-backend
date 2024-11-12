@@ -42,16 +42,33 @@ def create_app():
 
 app = create_app()
 
+
 def get_apple_public_key(kid):
     """Fetch and cache Apple's public keys"""
-    response = requests.get(APPLE_PUBLIC_KEY_URL)
-    keys = response.json()['keys']
-    
-    # Find the key with matching kid
-    for key in keys:
-        if key['kid'] == kid:
-            return RSAAlgorithm.from_jwk(json.dumps(key))
-    return None
+    try:
+        response = requests.get(APPLE_PUBLIC_KEY_URL)
+        response.raise_for_status()  # Raise an error for bad status codes
+        keys = response.json()['keys']
+        
+        # Find the key with matching kid
+        for key in keys:
+            if key['kid'] == kid:
+                # Convert the JWK to PEM format
+                public_key = RSAAlgorithm.from_jwk(json.dumps(key))
+                return public_key
+                
+        print(f"No matching key found for kid: {kid}")
+        return None
+        
+    except requests.RequestException as e:
+        print(f"Error fetching Apple public keys: {str(e)}")
+        return None
+    except (KeyError, json.JSONDecodeError) as e:
+        print(f"Error parsing Apple public keys: {str(e)}")
+        return None
+    except Exception as e:
+        print(f"Unexpected error getting public key: {str(e)}")
+        return None
 
 def verify_apple_token(identity_token):
     """Verify the Apple identity token"""
@@ -63,6 +80,7 @@ def verify_apple_token(identity_token):
         # Get the public key
         public_key = get_apple_public_key(kid)
         if not public_key:
+            print("Could not get Apple public key")
             return None
         
         # Verify and decode the token
@@ -74,9 +92,12 @@ def verify_apple_token(identity_token):
         )
         
         return decoded
-    
+        
     except jwt.InvalidTokenError as e:
         print(f"Token validation error: {str(e)}")
+        return None
+    except Exception as e:
+        print(f"Unexpected error verifying token: {str(e)}")
         return None
 
 
