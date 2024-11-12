@@ -97,14 +97,14 @@ def login():
         if not identity_token:
             return jsonify({'error': 'Identity token is required'}), 400
             
-        decoded_token = verify_apple_token(identity_token)
-        if not decoded_token:
+        # Just verify the token is valid
+        if not verify_apple_token(identity_token):
             return jsonify({'error': 'Invalid identity token'}), 401
 
-        # Get the verified email from the token
-        email = decoded_token.get('email')
+        # Use email from request
+        email = apple_user_data.get('email')
         if not email:
-            return jsonify({'error': 'Email not found in token'}), 400
+            return jsonify({'error': 'Email is required'}), 400
 
         existing_user = UserModel.query.filter_by(email=email).first()
 
@@ -123,7 +123,6 @@ def login():
                 'token': access_token
             })
         
-        # Only use fullName from request for new user creation
         full_name = apple_user_data.get('fullName', {})
         given_name = full_name.get('givenName', '')
         family_name = full_name.get('familyName', '')
@@ -133,7 +132,7 @@ def login():
             username = email.split('@')[0]  
 
         new_user = UserModel(
-            email=email,  # Using email from verified token
+            email=email,
             username=username,
             created_at=datetime.utcnow(),
         )
