@@ -14,6 +14,7 @@ from flask_cors import CORS
 import requests
 from jwt.algorithms import RSAAlgorithm
 import json
+import jwt as pyjwt
 
 # Import all models
 from models import UserModel  # This is crucial!
@@ -96,7 +97,7 @@ def verify_apple_token(identity_token):
     """Verify the Apple identity token"""
     try:
         # Decode the JWT header to get the key ID (kid)
-        headers = jwt.get_unverified_header(identity_token)
+        headers = pyjwt.get_unverified_header(identity_token)
         kid = headers['kid']
         
         # Get the public key
@@ -106,17 +107,17 @@ def verify_apple_token(identity_token):
             return None
         
         # Verify and decode the token
-        decoded = jwt.decode(
+        decoded = pyjwt.decode(
             identity_token,
             public_key,
             algorithms=['RS256'],
-            audience="host.exp.Exponent",  # This is the correct audience for Expo
+            audience="host.exp.Exponent",
             verify=True
         )
         
         return decoded
         
-    except jwt.InvalidTokenError as e:
+    except pyjwt.InvalidTokenError as e:
         print(f"Token validation error: {str(e)}")
         return None
     except Exception as e:
