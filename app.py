@@ -124,6 +124,25 @@ def verify_apple_token(identity_token):
         print(f"Unexpected error verifying token: {str(e)}")
         return None
 
+@app.route('/check-user', methods=['POST'])
+def check_user():
+    try:
+        data = request.get_json()
+        email = data.get('email')
+        
+        if not email:
+            return jsonify({'error': 'Email is required'}), 400
+
+        existing_user = UserModel.query.filter_by(email=email).first()
+        
+        return jsonify({
+            'exists': existing_user is not None
+        })
+
+    except Exception as e:
+        print(f"Error checking user: {str(e)}")
+        return jsonify({'error': 'Server error'}), 500
+
 @app.route('/login', methods=['POST'])
 def login():
     try:
@@ -167,16 +186,9 @@ def login():
             })
         
         # For new users, we need the full name (only available on first sign in)
-        full_name = apple_user_data.get('fullName', {})
-        if full_name is None:
-            full_name = {}
-            
-        given_name = full_name.get('givenName', '')
-        family_name = full_name.get('familyName', '')
-        
-        username = f"{given_name} {family_name}".strip()
+        username = apple_user_data.get('username')
         if not username:
-            username = email.split('@')[0]  
+            return jsonify({'error': 'Username is required for new users'}), 400
 
         new_user = UserModel(
             email=email,
