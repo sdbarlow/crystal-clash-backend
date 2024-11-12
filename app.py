@@ -111,7 +111,7 @@ def verify_apple_token(identity_token):
             identity_token,
             public_key,
             algorithms=['RS256'],
-            audience="host.exp.Exponent",
+            audience="com.skepticalrook.crystalclash",
             verify=True
         )
         
