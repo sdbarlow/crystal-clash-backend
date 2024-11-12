@@ -76,10 +76,6 @@ def verify_apple_token(identity_token):
         headers = jwt.get_unverified_header(identity_token)
         kid = headers['kid']
         
-        # Let's first see what's in the token without verification
-        unverified_decoded = jwt.decode(identity_token, options={"verify_signature": False})
-        print("Actual token audience:", unverified_decoded.get('aud'))
-        
         # Get the public key
         public_key = get_apple_public_key(kid)
         if not public_key:
@@ -91,7 +87,7 @@ def verify_apple_token(identity_token):
             identity_token,
             public_key,
             algorithms=['RS256'],
-            audience=unverified_decoded.get('aud'),  # Use the actual audience from the token
+            audience="host.exp.Exponent",  # This is the correct audience for Expo
             verify=True
         )
         
@@ -115,19 +111,19 @@ def login():
         if not apple_user_data:
             return jsonify({'error': 'Invalid JSON format'}), 400
 
-        # Verify the Apple identity token
+        # Verify the Apple identity token and get decoded data
         identity_token = apple_user_data.get('identityToken')
         if not identity_token:
             return jsonify({'error': 'Identity token is required'}), 400
             
-        # Just verify the token is valid
-        if not verify_apple_token(identity_token):
+        decoded_token = verify_apple_token(identity_token)
+        if not decoded_token:
             return jsonify({'error': 'Invalid identity token'}), 401
 
-        # Use email from request
-        email = apple_user_data.get('email')
+        # Get email from token if not in request
+        email = apple_user_data.get('email') or decoded_token.get('email')
         if not email:
-            return jsonify({'error': 'Email is required'}), 400
+            return jsonify({'error': 'Could not get email from token'}), 400
 
         existing_user = UserModel.query.filter_by(email=email).first()
 
@@ -146,7 +142,11 @@ def login():
                 'token': access_token
             })
         
+        # For new users, we need the full name (only available on first sign in)
         full_name = apple_user_data.get('fullName', {})
+        if full_name is None:
+            full_name = {}
+            
         given_name = full_name.get('givenName', '')
         family_name = full_name.get('familyName', '')
         
