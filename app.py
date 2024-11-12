@@ -1,7 +1,7 @@
 # app.py
 from flask import Flask, jsonify, request
 from flask_migrate import Migrate
-from flask_jwt_extended import JWTManager, create_access_token
+from flask_jwt_extended import JWTManager, create_access_token, get_jwt_identity, jwt_required
 from datetime import timedelta
 from config import Config
 from dotenv import load_dotenv
@@ -41,6 +41,27 @@ def create_app():
     return app
 
 app = create_app()
+
+@jwt.expired_token_loader
+def expired_token_callback(jwt_header, jwt_payload):
+    return jsonify({
+        'error': 'Token has expired',
+        'message': 'Please log in again'
+    }), 401
+
+@jwt.invalid_token_loader
+def invalid_token_callback(error):
+    return jsonify({
+        'error': 'Invalid token',
+        'message': 'Please provide a valid token'
+    }), 401
+
+@jwt.unauthorized_loader
+def missing_token_callback(error):
+    return jsonify({
+        'error': 'Authorization required',
+        'message': 'Token is missing'
+    }), 401
 
 def get_apple_public_key(kid):
     """Fetch and cache Apple's public keys"""
@@ -229,6 +250,29 @@ def search_users():
     except Exception as e:
         print(f"Search error: {str(e)}")
         return jsonify({'error': 'Failed to search users'}), 500
+    
+
+@app.route('/delete-account', methods=['DELETE'])
+@jwt_required()  # Ensure user is authenticated
+def delete_account():
+    try:
+        current_user_id = get_jwt_identity()
+        
+        user = UserModel.query.get(current_user_id)
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+
+        db.session.delete(user)
+        db.session.commit()
+
+        return jsonify({
+            'message': 'Account successfully deleted'
+        }), 200
+
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error deleting account: {str(e)}")
+        return jsonify({'error': 'Failed to delete account'}), 500
 
 if __name__ == '__main__':
     app.run()
