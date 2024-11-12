@@ -70,7 +70,6 @@ def verify_apple_token(identity_token):
             identity_token,
             public_key,
             algorithms=['RS256'],
-            audience='your.bundle.id',  # Your app's bundle ID
             verify=True
         )
         
