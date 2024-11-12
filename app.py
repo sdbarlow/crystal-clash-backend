@@ -1,7 +1,7 @@
 # app.py
 from flask import Flask, jsonify, request
 from flask_migrate import Migrate
-from flask_jwt_extended import JWTManager, create_access_token, get_jwt_identity, jwt_required
+from flask_jwt_extended import JWTManager, create_access_token, get_jwt_identity, jwt_required, get_jwt
 from datetime import timedelta
 from config import Config
 from dotenv import load_dotenv
@@ -124,25 +124,6 @@ def verify_apple_token(identity_token):
         print(f"Unexpected error verifying token: {str(e)}")
         return None
 
-@app.route('/check-user', methods=['POST'])
-def check_user():
-    try:
-        data = request.get_json()
-        email = data.get('email')
-        
-        if not email:
-            return jsonify({'error': 'Email is required'}), 400
-
-        existing_user = UserModel.query.filter_by(email=email).first()
-        
-        return jsonify({
-            'exists': existing_user is not None
-        })
-
-    except Exception as e:
-        print(f"Error checking user: {str(e)}")
-        return jsonify({'error': 'Server error'}), 500
-
 @app.route('/login', methods=['POST'])
 def login():
     try:
@@ -163,12 +144,17 @@ def login():
         if not decoded_token:
             return jsonify({'error': 'Invalid identity token'}), 401
 
-        # Get email from token if not in request
-        email = apple_user_data.get('email') or decoded_token.get('email')
+        # Get the Apple user ID from the decoded token
+        apple_user_id = decoded_token.get('sub')  # This is the stable user identifier
+        if not apple_user_id:
+            return jsonify({'error': 'Could not get user ID from token'}), 400
+
+        # Get email from token
+        email = decoded_token.get('email')
         if not email:
             return jsonify({'error': 'Could not get email from token'}), 400
 
-        existing_user = UserModel.query.filter_by(email=email).first()
+        existing_user = UserModel.query.filter_by(apple_user_id=apple_user_id).first()
 
         if existing_user:
             access_token = create_access_token(
@@ -181,24 +167,58 @@ def login():
             
             return jsonify({
                 'message': 'User logged in successfully',
-                'user_id': existing_user.id,
+                'isNewUser': False,
                 'token': access_token
             })
         
-        # For new users, we need the full name (only available on first sign in)
-        username = apple_user_data.get('username')
-        if not username:
-            return jsonify({'error': 'Username is required for new users'}), 400
+        # For new users, create a temporary token to complete signup
+        temporary_token = create_access_token(
+            identity=apple_user_id,
+            additional_claims={
+                'email': email,
+                'is_temporary': True
+            },
+            expires_delta=timedelta(minutes=15)  # Short expiration for security
+        )
 
+        return jsonify({
+            'message': 'Please complete signup',
+            'isNewUser': True,
+            'temporaryToken': temporary_token
+        }), 200
+
+    except Exception as e:
+        print(f"Unexpected error: {str(e)}")
+        return jsonify({'error': 'Internal server error'}), 500
+    
+@app.route('/complete-signup', methods=['POST'])
+@jwt_required()  # This will verify the temporary token
+def complete_signup():
+    try:
+        claims = get_jwt()
+        if not claims.get('is_temporary'):
+            return jsonify({'error': 'Invalid token type'}), 401
+
+        data = request.get_json()
+        username = data.get('username')
+        if not username:
+            return jsonify({'error': 'Username is required'}), 400
+
+        apple_user_id = get_jwt_identity()
+        email = claims.get('email')
+
+        # Create the new user
         new_user = UserModel(
             email=email,
             username=username,
+            apple_user_id=apple_user_id,
             created_at=datetime.utcnow(),
         )
 
         db.session.add(new_user)
         db.session.commit()
 
+        # Create the final access token
         access_token = create_access_token(
             identity=new_user.id,
             additional_claims={
@@ -209,14 +229,13 @@ def login():
 
         return jsonify({
             'message': 'User created successfully',
-            'user_id': new_user.id,
             'token': access_token
         }), 201
 
     except IntegrityError as e:
         db.session.rollback()
         print(f"Database integrity error: {str(e)}")
-        return jsonify({'error': 'Database constraint violation. User might already exist.'}), 400
+        return jsonify({'error': 'Username already taken'}), 400
     except Exception as e:
         print(f"Unexpected error: {str(e)}")
         return jsonify({'error': 'Internal server error'}), 500

@@ -8,6 +8,7 @@ class UserModel(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     snap_id = db.Column(db.String(80), unique=True, nullable=True)  # Snapchat's user ID
     username = db.Column(db.String(80))
+    apple_user_id = db.Column(db.String(255), unique=True, nullable=False)
     email = db.Column(db.String(100), unique=True, nullable=False) 
     bitmoji_url = db.Column(db.String(255), nullable=True)  # Optional: store Bitmoji avatar URL
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
