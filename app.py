@@ -14,7 +14,6 @@ from flask_cors import CORS
 import requests
 from jwt.algorithms import RSAAlgorithm
 import json
-import jwt
 
 # Import all models
 from models import UserModel  # This is crucial!
@@ -22,6 +21,8 @@ from models import UserModel  # This is crucial!
 APPLE_PUBLIC_KEY_URL = 'https://appleid.apple.com/auth/keys'
 
 load_dotenv()
+
+jwt = JWTManager()
 
 def create_app():
     app = Flask(__name__)
@@ -35,13 +36,14 @@ def create_app():
 
     # Initialize extensions
     db.init_app(app)
-    jwt = JWTManager(app)
+    jwt.init_app(app)  # Initialize jwt with app
     migrate = Migrate(app, db)
 
     return app
 
 app = create_app()
 
+# Now these decorators will work
 @jwt.expired_token_loader
 def expired_token_callback(jwt_header, jwt_payload):
     return jsonify({
