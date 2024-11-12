@@ -42,7 +42,6 @@ def create_app():
 
 app = create_app()
 
-
 def get_apple_public_key(kid):
     """Fetch and cache Apple's public keys"""
     try:
@@ -88,6 +87,7 @@ def verify_apple_token(identity_token):
             identity_token,
             public_key,
             algorithms=['RS256'],
+            audience="expo.modules.appleauthentication",
             verify=True
         )
         
@@ -99,7 +99,6 @@ def verify_apple_token(identity_token):
     except Exception as e:
         print(f"Unexpected error verifying token: {str(e)}")
         return None
-
 
 @app.route('/login', methods=['POST'])
 def login():
