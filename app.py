@@ -76,6 +76,10 @@ def verify_apple_token(identity_token):
         headers = jwt.get_unverified_header(identity_token)
         kid = headers['kid']
         
+        # Let's first see what's in the token without verification
+        unverified_decoded = jwt.decode(identity_token, options={"verify_signature": False})
+        print("Actual token audience:", unverified_decoded.get('aud'))
+        
         # Get the public key
         public_key = get_apple_public_key(kid)
         if not public_key:
@@ -87,7 +91,7 @@ def verify_apple_token(identity_token):
             identity_token,
             public_key,
             algorithms=['RS256'],
-            audience="expo.modules.appleauthentication",
+            audience=unverified_decoded.get('aud'),  # Use the actual audience from the token
             verify=True
         )
         
