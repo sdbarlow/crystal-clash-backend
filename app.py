@@ -11,9 +11,15 @@ import os
 from datetime import datetime 
 from sqlalchemy.exc import IntegrityError
 from flask_cors import CORS
+import requests
+from jwt.algorithms import RSAAlgorithm
+import json
+import jwt
 
 # Import all models
 from models import UserModel  # This is crucial!
+
+APPLE_PUBLIC_KEY_URL = 'https://appleid.apple.com/auth/keys'
 
 load_dotenv()
 
@@ -36,6 +42,45 @@ def create_app():
 
 app = create_app()
 
+def get_apple_public_key(kid):
+    """Fetch and cache Apple's public keys"""
+    response = requests.get(APPLE_PUBLIC_KEY_URL)
+    keys = response.json()['keys']
+    
+    # Find the key with matching kid
+    for key in keys:
+        if key['kid'] == kid:
+            return RSAAlgorithm.from_jwk(json.dumps(key))
+    return None
+
+def verify_apple_token(identity_token):
+    """Verify the Apple identity token"""
+    try:
+        # Decode the JWT header to get the key ID (kid)
+        headers = jwt.get_unverified_header(identity_token)
+        kid = headers['kid']
+        
+        # Get the public key
+        public_key = get_apple_public_key(kid)
+        if not public_key:
+            return None
+        
+        # Verify and decode the token
+        decoded = jwt.decode(
+            identity_token,
+            public_key,
+            algorithms=['RS256'],
+            audience='your.bundle.id',  # Your app's bundle ID
+            verify=True
+        )
+        
+        return decoded
+    
+    except jwt.InvalidTokenError as e:
+        print(f"Token validation error: {str(e)}")
+        return None
+
+
 @app.route('/login', methods=['POST'])
 def login():
     try:
@@ -47,9 +92,19 @@ def login():
         if not apple_user_data:
             return jsonify({'error': 'Invalid JSON format'}), 400
 
-        email = apple_user_data.get('email')
+        # Verify the Apple identity token
+        identity_token = apple_user_data.get('identityToken')
+        if not identity_token:
+            return jsonify({'error': 'Identity token is required'}), 400
+            
+        decoded_token = verify_apple_token(identity_token)
+        if not decoded_token:
+            return jsonify({'error': 'Invalid identity token'}), 401
+
+        # Get the verified email from the token
+        email = decoded_token.get('email')
         if not email:
-            return jsonify({'error': 'Email is required'}), 400
+            return jsonify({'error': 'Email not found in token'}), 400
 
         existing_user = UserModel.query.filter_by(email=email).first()
 
@@ -68,6 +123,7 @@ def login():
                 'token': access_token
             })
         
+        # Only use fullName from request for new user creation
         full_name = apple_user_data.get('fullName', {})
         given_name = full_name.get('givenName', '')
         family_name = full_name.get('familyName', '')
@@ -77,7 +133,7 @@ def login():
             username = email.split('@')[0]  
 
         new_user = UserModel(
-            email=email,
+            email=email,  # Using email from verified token
             username=username,
             created_at=datetime.utcnow(),
         )
